@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>线性方程组求解与几何验证</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 20px; }
+        header { text-align: center; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        h1, h2 { color: #0056b3; }
+        .step { background-color: #fff; padding: 15px 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); opacity: 0; transition: opacity 1s ease-in-out; }
+        .step.visible { opacity: 1; }
+        code { font-family: 'Courier New', Courier, monospace; background-color: #eee; padding: 2px 5px; border-radius: 4px; }
+        .matrix-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+        .matrix table { border-collapse: collapse; }
+        .matrix td { width: 45px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
+        .matrix .brackets { font-size: 60px; font-weight: bold; }
+        .operator { font-size: 24px; font-weight: bold; }
+        .solution { font-size: 22px; font-weight: bold; color: #28a745; text-align: center; }
+        svg { border: 1px solid #ccc; width: 100%; height: auto; }
+        button { font-size: 18px; padding: 12px 25px; cursor: pointer; display: block; margin: 20px auto; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>线性方程组：从代数求解到几何验证</h1>
+    </header>
+
+    <main id="presentation-container">
+        <div id="step1" class="step">
+            <h2>1. 问题：求解多元方程组</h2>
+            <code>2x + 3y = 8</code><br>
+            <code>4x + 1y = 6</code>
+        </div>
+
+        <div id="step2" class="step">
+            <h2>2. 拆解为矩阵形式 Ax = b</h2>
+            <p>我们将方程组的“系数”、“未知数”和“常数项”分离。</p>
+            <div class="matrix-container">
+                <div class="matrix"><table><tr><td>2</td><td>3</td></tr><tr><td>4</td><td>1</td></tr></table><div style="text-align:center;">A (系数矩阵)</div></div>
+                <div class="matrix"><table><tr><td>x</td></tr><tr><td>y</td></tr></table><div style="text-align:center;">x (未知向量)</div></div>
+                <div class="operator">=</div>
+                <div class="matrix"><table><tr><td>8</td></tr><tr><td>6</td></tr></table><div style="text-align:center;">b (常数向量)</div></div>
+            </div>
+            <p><small><i>(注：您之前提到的v和j，在此分别对应未知向量x和常数向量b)</i></small></p>
+        </div>
+
+        <div id="step3" class="step">
+            <h2>3. 计算逆矩阵 A⁻¹</h2>
+            <p>首先计算行列式: <code>det(A) = 2*1 - 3*4 = -10</code></p>
+            <p>然后应用公式 <code>A⁻¹ = (1/det(A)) * [[d, -b], [-c, a]]</code></p>
+            <div class="matrix-container">
+                <div class="matrix"><code>A⁻¹ = </code></div>
+                <div class="operator">1 / -10</div>
+                <div class="matrix"><span class="brackets">[</span><table><tr><td>1</td><td>-3</td></tr><tr><td>-4</td><td>2</td></tr></table><span class="brackets">]</span></div>
+            </div>
+        </div>
+        
+        <div id="step4" class="step">
+            <h2>4. 算出未知向量 x = A⁻¹b</h2>
+            <p><code>x = (1/-10) * [[1, -3], [-4, 2]] * [8, 6]</code></p>
+            <p><code>x = (1/-10) * [-10, -20]</code></p>
+            <div class="solution">解：x = [1, 2]</div>
+        </div>
+
+        <div id="step5" class="step">
+            <h2>5. 几何验证：准备工作</h2>
+            <p>我们在标准坐标系中画出“解向量” <code>x=[1,2]</code> (蓝色) 和“目标向量” <code>b=[8,6]</code> (紫色虚线)。我们的目标是验证矩阵A能否将蓝色向量精确地变换到紫色向量上。</p>
+            <svg id="canvas" width="800" height="600" viewBox="-400 -300 800 600"></svg>
+        </div>
+
+    </main>
+    <button id="startBtn" onclick="startPresentation()">开始演示</button>
+
+    <script>
+        const steps = document.querySelectorAll('.step');
+        const startBtn = document.getElementById('startBtn');
+        const svg = document.getElementById('canvas');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 40;
+
+        // --- 定义向量和变换 ---
+        const i_initial = { x: 1, y: 0 }; const j_initial = { x: 0, y: 1 };
+        const x_vec = { x: 1, y: 2 }; // 解向量
+        const b_vec = { x: 8, y: 6 }; // 目标向量
+        const i_final = { x: 2, y: 4 }; // A矩阵的第一列
+        const j_final = { x: 3, y: 1 }; // A矩阵的第二列
+
+        let animationFrameId = null;
+
+        // --- 核心绘图函数 ---
+        function createVector(x, y, color, width = 2, style = "solid") { /* ... same as before ... */ 
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', 0);
+            line.setAttribute('x2', x * SCALE); line.setAttribute('y2', -y * SCALE);
+            line.setAttribute('stroke', color); line.setAttribute('stroke-width', width);
+            line.setAttribute('marker-end', `url(#arrow-${color})`);
+            if (style === 'dashed') { line.setAttribute('stroke-dasharray', '5,5'); }
+            return line;
+        }
+        function createMarker(id, color) { /* ... same as before ... */ 
+             const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', 8); marker.setAttribute('refY', 5);
+            marker.setAttribute('markerWidth', 4); marker.setAttribute('markerHeight', 4);
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); path.setAttribute('fill', color);
+            marker.appendChild(path); return marker;
+        }
+        function drawGrid(i_vec, j_vec) { /* ... same as before ... */ 
+            const gridGroup = document.createElementNS(SVG_NS, 'g');
+            gridGroup.setAttribute('stroke', '#ddd'); gridGroup.setAttribute('stroke-width', 0.5);
+            for (let i = -20; i <= 20; i++) {
+                const startX1 = i * i_vec.x * SCALE - 20 * j_vec.x * SCALE; const startY1 = -i * i_vec.y * SCALE + 20 * j_vec.y * SCALE;
+                const endX1 = i * i_vec.x * SCALE + 20 * j_vec.x * SCALE; const endY1 = -i * i_vec.y * SCALE - 20 * j_vec.y * SCALE;
+                const line1 = document.createElementNS(SVG_NS, 'line');
+                line1.setAttribute('x1', startX1); line1.setAttribute('y1', startY1); line1.setAttribute('x2', endX1); line1.setAttribute('y2', endY1);
+                gridGroup.appendChild(line1);
+                const startX2 = i * j_vec.x * SCALE - 20 * i_vec.x * SCALE; const startY2 = -i * j_vec.y * SCALE + 20 * i_vec.y * SCALE;
+                const endX2 = i * j_vec.x * SCALE + 20 * i_vec.x * SCALE; const endY2 = -i * j_vec.y * SCALE - 20 * i_vec.y * SCALE;
+                const line2 = document.createElementNS(SVG_NS, 'line');
+                line2.setAttribute('x1', startX2); line2.setAttribute('y1', startY2); line2.setAttribute('x2', endX2); line2.setAttribute('y2', endY2);
+                gridGroup.appendChild(line2);
+            }
+            return gridGroup;
+        }
+        function drawScene(i_vec, j_vec, show_x, show_b, show_basis=false) {
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red')); defs.appendChild(createMarker('arrow-green', 'green'));
+            defs.appendChild(createMarker('arrow-purple', 'purple')); defs.appendChild(createMarker('arrow-blue', 'blue'));
+            svg.appendChild(defs);
+            svg.appendChild(drawGrid(i_vec, j_vec));
+            svg.appendChild(createVector(20, 0, 'black', 1)); svg.appendChild(createVector(0, 20, 'black', 1));
+            if (show_basis) {
+                svg.appendChild(createVector(i_vec.x, i_vec.y, 'red', 3));
+                svg.appendChild(createVector(j_vec.x, j_vec.y, 'green', 3));
+            }
+            if (show_b) { svg.appendChild(createVector(b_vec.x, b_vec.y, 'purple', 3, 'dashed')); }
+            if (show_x) {
+                const x_transformed_x = x_vec.x * i_vec.x + x_vec.y * j_vec.x;
+                const x_transformed_y = x_vec.x * i_vec.y + x_vec.y * j_vec.y;
+                svg.appendChild(createVector(x_transformed_x, x_transformed_y, 'blue', 5));
+            }
+        }
+        
+        function animateTransform(callback) {
+            cancelAnimationFrame(animationFrameId); let start_time = null; const duration = 2500;
+            function animate(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+                const current_i = { x: i_initial.x + (i_final.x - i_initial.x) * progress, y: i_initial.y + (i_final.y - i_initial.y) * progress };
+                const current_j = { x: j_initial.x + (j_final.x - j_initial.x) * progress, y: j_initial.y + (j_final.y - j_initial.y) * progress };
+                drawScene(current_i, current_j, true, true, true);
+                if (progress < 1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else { if (callback) callback(); }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // --- 控制演示流程 ---
+        function startPresentation() {
+            startBtn.style.display = 'none';
+            // Hide all steps initially
+            steps.forEach(step => step.classList.remove('visible'));
+            
+            let delay = 500;
+            for (let i = 1; i <= 5; i++) {
+                setTimeout(() => {
+                    const step = document.getElementById(`step${i}`);
+                    step.classList.add('visible');
+                    // Special actions for step 5
+                    if (i === 5) {
+                        const step6 = document.createElement('div');
+                        step6.id = 'step6';
+                        step6.className = 'step';
+                        step6.innerHTML = '<h2>6. 动态验证：执行变换 A</h2><p>观察蓝色向量 x 如何随着空间变换，最终与紫色向量 b 重合...</p>';
+                        step.parentNode.insertBefore(step6, step.nextSibling);
+
+                        drawScene(i_initial, j_initial, true, true, true); // Draw initial state in SVG
+
+                        setTimeout(() => {
+                            step6.classList.add('visible');
+                            animateTransform(() => {
+                                const finalStep = document.createElement('div');
+                                finalStep.id = 'step7';
+                                finalStep.className = 'step visible';
+                                finalStep.innerHTML = '<h2>7. 命中目标！</h2><p class="solution">验证成功！Ax = b</p>';
+                                step6.parentNode.insertBefore(finalStep, step6.nextSibling);
+                            });
+                        }, 1500);
+                    }
+                }, delay);
+                delay += 2000; // time between steps
+            }
+        }
+    </script>
+</body>
+</html>

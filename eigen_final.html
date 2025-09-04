@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>特征值与特征向量的几何意义 V12</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1000px; margin: 20px auto; padding: 0 20px; }
+        header, .section-header { text-align: center; }
+        h1, h2 { color: #0056b3; }
+        .comparison-container { display: flex; justify-content: space-around; align-items: flex-start; gap: 20px; margin-top: 20px; padding-top: 20px; border-top: 2px solid #ccc; }
+        .panel { width: 48%; }
+        .panel h3 { text-align: center; }
+        svg { border: 1px solid #ccc; width: 100%; height: auto; }
+        button { font-size: 18px; padding: 12px 25px; cursor: pointer; display: block; margin: 20px auto; }
+        code { font-family: 'Courier New', Courier, monospace; background-color: #eee; padding: 2px 5px; border-radius: 4px; }
+        p { text-align: center; }
+    </style>
+</head>
+<body>
+
+    <header><h1>几何解释: A&vec;v = &lambda;&vec;v (V12)</h1></header>
+    <p>对于矩阵 A = [[2, 2], [1, 3]]</p>
+    <button id="startBtn" onclick="startAllDemos()">开始演示</button>
+
+    <div class="section-header">
+        <h2>情况一: 特征值 &lambda;₁ = 1</h2>
+        <p>对应特征向量 &vec;v₁ = [-2, 1] (蓝色)</p>
+    </div>
+    <div class="comparison-container">
+        <div class="panel">
+            <h3>左: 矩阵变换 A&vec;v₁</h3>
+            <svg id="canvas1-left" viewBox="-250 -250 500 500"></svg>
+            <p id="info1-left">变换后的向量: ?</p>
+        </div>
+        <div class="panel">
+            <h3>右: 标量乘法 &lambda;₁&vec;v₁</h3>
+            <svg id="canvas1-right" viewBox="-250 -250 500 500"></svg>
+            <p id="info1-right">变换后的向量: ?</p>
+        </div>
+    </div>
+
+    <div class="section-header">
+        <h2>情况二: 特征值 &lambda;₂ = 4</h2>
+        <p>对应特征向量 &vec;v₂ = [1, 1] (橙色)</p>
+    </div>
+    <div class="comparison-container">
+        <div class="panel">
+            <h3>左: 矩阵变换 A&vec;v₂</h3>
+            <svg id="canvas2-left" viewBox="-250 -250 500 500"></svg>
+            <p id="info2-left">变换后的向量: ?</p>
+        </div>
+        <div class="panel">
+            <h3>右: 标量乘法 &lambda;₂&vec;v₂</h3>
+            <svg id="canvas2-right" viewBox="-250 -250 500 500"></svg>
+            <p id="info2-right">变换后的向量: ?</p>
+        </div>
+    </div>
+
+    <script>
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 50;
+
+        const A = { i_final: { x: 2, y: 1 }, j_final: { x: 2, y: 3 } };
+        const lambda1 = 1, v1 = { x: -2, y: 1, color: 'blue' };
+        const lambda2 = 4, v2 = { x: 1, y: 1, color: 'orange' };
+        
+        function createVector(x1,y1,x2,y2,c,w=2,s="solid",sc){const l=document.createElementNS(SVG_NS,'line');l.setAttribute('x1',x1*sc);l.setAttribute('y1',-y1*sc);l.setAttribute('x2',x2*sc);l.setAttribute('y2',-y2*sc);l.setAttribute('stroke',c);l.setAttribute('stroke-width',w);l.setAttribute('marker-end',`url(#arrow-${c})`);if(s==='dashed'){l.setAttribute('stroke-dasharray','5,5');}return l;}
+        function createMarker(id,c){const m=document.createElementNS(SVG_NS,'marker');m.setAttribute('id',id);m.setAttribute('viewBox','0 0 10 10');m.setAttribute('refX',8);m.setAttribute('refY',5);m.setAttribute('markerWidth',4);m.setAttribute('markerHeight',4);m.setAttribute('orient','auto-start-reverse');const p=document.createElementNS(SVG_NS,'path');p.setAttribute('d','M 0 0 L 10 5 L 0 10 z');p.setAttribute('fill',c);m.appendChild(p);return m;}
+        function drawGrid(iv,jv,sc){const g=document.createElementNS(SVG_NS,'g');g.setAttribute('stroke','#ddd');g.setAttribute('stroke-width',0.5);for(let i=-10;i<=10;i++){const sx1=i*iv.x*sc-10*jv.x*sc,sy1=-i*iv.y*sc+10*jv.y*sc,ex1=i*iv.x*sc+10*jv.x*sc,ey1=-i*iv.y*sc-10*jv.y*sc;const l1=document.createElementNS(SVG_NS,'line');l1.setAttribute('x1',sx1);l1.setAttribute('y1',sy1);l1.setAttribute('x2',ex1);l1.setAttribute('y2',ey1);g.appendChild(l1);const sx2=i*jv.x*sc-10*iv.x*sc,sy2=-i*jv.y*sc+10*iv.y*sc,ex2=i*jv.x*sc+10*iv.x*sc,ey2=-i*jv.y*sc-10*iv.y*sc;const l2=document.createElementNS(SVG_NS,'line');l2.setAttribute('x1',sx2);l2.setAttribute('y1',sy2);l2.setAttribute('x2',ex2);l2.setAttribute('y2',ey2);g.appendChild(l2);}return g;}
+
+        function drawScene(svg, i_vec, j_vec, main_vec) {
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker(`arrow-${main_vec.color}`, main_vec.color));
+            defs.appendChild(createMarker('arrow-red', 'red'));
+            defs.appendChild(createMarker('arrow-green', 'green'));
+            svg.appendChild(defs);
+            svg.appendChild(drawGrid(i_vec, j_vec, SCALE));
+            
+            // NEW: Draw the basis vectors
+            svg.appendChild(createVector(0,0,i_vec.x, i_vec.y, 'red', 3, 'solid', SCALE));
+            svg.appendChild(createVector(0,0,j_vec.x, j_vec.y, 'green', 3, 'solid', SCALE));
+
+            const transformed_x = main_vec.x * i_vec.x + main_vec.y * j_vec.x;
+            const transformed_y = main_vec.x * i_vec.y + main_vec.y * j_vec.y;
+            svg.appendChild(createVector(0,0, transformed_x, transformed_y, main_vec.color, 5, 'solid', SCALE));
+        }
+        
+        function animate(svg, info, i_start, j_start, i_end, j_end, main_vec, final_vec, duration = 2000) {
+            let start_time = null;
+            function animation_step(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+                const current_i = { x: i_start.x + (i_end.x - i_start.x) * progress, y: i_start.y + (i_end.y - i_start.y) * progress };
+                const current_j = { x: j_start.x + (j_end.x - j_start.x) * progress, y: j_start.y + (j_end.y - j_start.y) * progress };
+                drawScene(svg, current_i, current_j, main_vec);
+                if (progress < 1) { requestAnimationFrame(animation_step); }
+                else { info.textContent = `变换后的向量: [${final_vec.x.toFixed(1)}, ${final_vec.y.toFixed(1)}]`; }
+            }
+            requestAnimationFrame(animation_step);
+        }
+
+        function animateScalar(svg, info, vec, start_scalar, end_scalar, duration = 2000) {
+            let start_time = null;
+            function animation_step(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+                const current_scalar = start_scalar + (end_scalar - start_scalar) * progress;
+                const scaled_vec = { x: vec.x * current_scalar, y: vec.y * current_scalar, color: vec.color};
+                drawScene(svg, {x:1, y:0}, {x:0, y:1}, scaled_vec);
+                if (progress < 1) { requestAnimationFrame(animation_step); }
+                else { info.textContent = `变换后的向量: [${scaled_vec.x.toFixed(1)}, ${scaled_vec.y.toFixed(1)}]`; }
+            }
+            requestAnimationFrame(animation_step);
+        }
+
+        function startAllDemos() {
+            document.getElementById('startBtn').disabled = true;
+            
+            const svg1L = document.getElementById('canvas1-left'); const info1L = document.getElementById('info1-left');
+            const svg1R = document.getElementById('canvas1-right'); const info1R = document.getElementById('info1-right');
+            const v1_final_A = { x: A.i_final.x * v1.x + A.j_final.x * v1.y, y: A.i_final.y * v1.x + A.j_final.y * v1.y };
+            drawScene(svg1L, {x:1, y:0}, {x:0, y:1}, v1);
+            drawScene(svg1R, {x:1, y:0}, {x:0, y:1}, v1);
+            info1L.textContent = `变换后的向量: ?`; info1R.textContent = `变换后的向量: ?`;
+            animate(svg1L, info1L, {x:1, y:0}, {x:0, y:1}, A.i_final, A.j_final, v1, v1_final_A);
+            animateScalar(svg1R, info1R, v1, 1, lambda1);
+
+            const svg2L = document.getElementById('canvas2-left'); const info2L = document.getElementById('info2-left');
+            const svg2R = document.getElementById('canvas2-right'); const info2R = document.getElementById('info2-right');
+            const v2_final_A = { x: A.i_final.x * v2.x + A.j_final.x * v2.y, y: A.i_final.y * v2.x + A.j_final.y * v2.y };
+            drawScene(svg2L, {x:1, y:0}, {x:0, y:1}, v2);
+            drawScene(svg2R, {x:1, y:0}, {x:0, y:1}, v2);
+            info2L.textContent = `变换后的向量: ?`; info2R.textContent = `变换后的向量: ?`;
+            animate(svg2L, info2L, {x:1, y:0}, {x:0, y:1}, A.i_final, A.j_final, v2, v2_final_A);
+            animateScalar(svg2R, info2R, v2, 1, lambda2);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>几何验证 Ax = b</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        .container { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 10px 0; }
+        .matrix-display { border: 1px solid #999; padding: 10px; border-radius: 5px; }
+        .matrix-display .label { font-weight: bold; margin-bottom: 5px; }
+        .matrix-display table { border-collapse: collapse; margin: 0 auto; }
+        .matrix-display td { width: 40px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
+        svg { border: 1px solid #ccc; }
+        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
+        .info { font-family: 'Courier New', Courier, monospace; font-size: 16px; margin: 10px; min-height: 50px; background-color: #f0f0f0; padding: 10px; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <h1>几何验证 Ax = b</h1>
+    <div class="container">
+        <div class="matrix-display">
+            <div class="label">变换矩阵 A</div>
+            <table>
+                <tr><td>2</td><td>3</td></tr>
+                <tr><td>4</td><td>1</td></tr>
+            </table>
+        </div>
+         <div class="matrix-display">
+            <div class="label">解向量 x</div>
+            <table><tr><td>1</td></tr><tr><td>2</td></tr></table>
+        </div>
+    </div>
+    <svg id="canvas" width="800" height="600" viewBox="-400 -300 800 600"></svg>
+    <div class="info" id="info-panel">请点击按钮开始</div>
+    <div>
+        <button id="btn1" onclick="showProblem()">第一步：展示起点(x)和目标(b)</button>
+        <button id="btn2" onclick="applyTransform()" disabled>第二步：执行变换 A</button>
+        <button onclick="reset()">重置</button>
+    </div>
+
+    <script>
+        const svg = document.getElementById('canvas');
+        const infoPanel = document.getElementById('info-panel');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 40;
+
+        const i_initial = { x: 1, y: 0 };
+        const j_initial = { x: 0, y: 1 };
+        
+        const x_vec = { x: 1, y: 2 }; // The solution vector (our starting point)
+        const b_vec = { x: 8, y: 6 }; // The target vector
+        
+        const i_final = { x: 2, y: 4 }; // Columns of A
+        const j_final = { x: 3, y: 1 };
+
+        let current_i = { ...i_initial };
+        let current_j = { ...j_initial };
+        let animationFrameId = null;
+        
+        function createVector(x, y, color, width = 2, style = "solid") {
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', 0);
+            line.setAttribute('x2', x * SCALE); line.setAttribute('y2', -y * SCALE);
+            line.setAttribute('stroke', color); line.setAttribute('stroke-width', width);
+            line.setAttribute('marker-end', `url(#arrow-${color})`);
+            if (style === 'dashed') {
+                line.setAttribute('stroke-dasharray', '5,5');
+            }
+            return line;
+        }
+        function createMarker(id, color) { /* ... same as before ... */ 
+            const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', 8); marker.setAttribute('refY', 5);
+            marker.setAttribute('markerWidth', 4); marker.setAttribute('markerHeight', 4);
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); path.setAttribute('fill', color);
+            marker.appendChild(path); return marker;
+        }
+        function drawGrid(i_vec, j_vec) { /* ... same as before ... */ 
+            const gridGroup = document.createElementNS(SVG_NS, 'g');
+            gridGroup.setAttribute('stroke', '#ddd'); gridGroup.setAttribute('stroke-width', 0.5);
+            for (let i = -20; i <= 20; i++) {
+                const startX1 = i * i_vec.x * SCALE - 20 * j_vec.x * SCALE; const startY1 = -i * i_vec.y * SCALE + 20 * j_vec.y * SCALE;
+                const endX1 = i * i_vec.x * SCALE + 20 * j_vec.x * SCALE; const endY1 = -i * i_vec.y * SCALE - 20 * j_vec.y * SCALE;
+                const line1 = document.createElementNS(SVG_NS, 'line');
+                line1.setAttribute('x1', startX1); line1.setAttribute('y1', startY1); line1.setAttribute('x2', endX1); line1.setAttribute('y2', endY1);
+                gridGroup.appendChild(line1);
+                const startX2 = i * j_vec.x * SCALE - 20 * i_vec.x * SCALE; const startY2 = -i * j_vec.y * SCALE + 20 * i_vec.y * SCALE;
+                const endX2 = i * j_vec.x * SCALE + 20 * i_vec.x * SCALE; const endY2 = -i * j_vec.y * SCALE - 20 * i_vec.y * SCALE;
+                const line2 = document.createElementNS(SVG_NS, 'line');
+                line2.setAttribute('x1', startX2); line2.setAttribute('y1', startY2); line2.setAttribute('x2', endX2); line2.setAttribute('y2', endY2);
+                gridGroup.appendChild(line2);
+            }
+            return gridGroup;
+        }
+        
+        function drawScene(i_vec, j_vec, show_x, show_b) {
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red'));
+            defs.appendChild(createMarker('arrow-green', 'green'));
+            defs.appendChild(createMarker('arrow-purple', 'purple'));
+            defs.appendChild(createMarker('arrow-blue', 'blue'));
+            svg.appendChild(defs);
+
+            svg.appendChild(drawGrid(i_vec, j_vec));
+            svg.appendChild(createVector(20, 0, 'black', 1)); 
+            svg.appendChild(createVector(0, 20, 'black', 1));
+            
+            if (show_b) {
+                // Target vector b is always drawn in the original grid
+                svg.appendChild(createVector(b_vec.x, b_vec.y, 'purple', 3, 'dashed'));
+            }
+
+            if (show_x) {
+                // The vector x is transformed along with the basis vectors
+                const x_transformed_x = x_vec.x * i_vec.x + x_vec.y * j_vec.x;
+                const x_transformed_y = x_vec.x * i_vec.y + x_vec.y * j_vec.y;
+                svg.appendChild(createVector(x_transformed_x, x_transformed_y, 'blue', 5));
+            }
+        }
+
+        function animateTransform(callback) {
+            cancelAnimationFrame(animationFrameId);
+            let start_time = null;
+            const duration = 2000;
+            
+            function animate(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+
+                current_i.x = i_initial.x + (i_final.x - i_initial.x) * progress;
+                current_i.y = i_initial.y + (i_final.y - i_initial.y) * progress;
+                current_j.x = j_initial.x + (j_final.x - j_initial.x) * progress;
+                current_j.y = j_initial.y + (j_final.y - j_initial.y) * progress;
+                
+                drawScene(current_i, current_j, true, true);
+
+                if (progress < 1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                    if (callback) callback();
+                }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+        
+        function showProblem() {
+            reset();
+            drawScene(i_initial, j_initial, true, true);
+            infoPanel.innerHTML = `<b>验证:</b> 蓝色的解向量 x=[1,2] 能否经过A变换, 命中紫色的目标向量 b=[8,6] ?`;
+            document.getElementById('btn2').disabled = false;
+        }
+
+        function applyTransform() {
+            document.getElementById('btn1').disabled = true;
+            document.getElementById('btn2').disabled = true;
+            infoPanel.innerHTML = '<b>执行变换 A ...</b> 空间根据 A 的指令发生扭曲...';
+            animateTransform(() => {
+                infoPanel.innerHTML = `<b>命中目标!</b> 变换后的向量 Ax 正好落在 [8,6] 位置, 与目标向量 b 完全重合。<b>验证成功!</b>`;
+            });
+        }
+
+        function reset() {
+            cancelAnimationFrame(animationFrameId);
+            current_i = { ...i_initial };
+            current_j = { ...j_initial };
+            drawScene(current_i, current_j, false, false);
+            infoPanel.innerHTML = "请点击按钮开始";
+            document.getElementById('btn1').disabled = false;
+            document.getElementById('btn2').disabled = true;
+        }
+        
+        reset();
+    </script>
+</body>
+</html>

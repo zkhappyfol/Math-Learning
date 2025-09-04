@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>矩阵复合变换可视化 V3</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        .container { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 10px 0; }
+        .matrix-display { border: 1px solid #999; padding: 10px; border-radius: 5px; }
+        .matrix-display .label { font-weight: bold; margin-bottom: 5px; }
+        .matrix-display table { border-collapse: collapse; margin: 0 auto; }
+        .matrix-display td { width: 40px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
+        .op { font-size: 24px; font-weight: bold; }
+        svg { border: 1px solid #ccc; }
+        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
+        .info { font-family: 'Courier New', Courier, monospace; font-size: 16px; margin: 10px; min-height: 50px; background-color: #f0f0f0; padding: 10px; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <h1>矩阵复合变换 V3: 先旋转(R)再剪切(S)</h1>
+
+    <div class="container">
+        <div class="matrix-display">
+            <div class="label">剪切矩阵 S</div>
+            <table id="matrix-s">
+                <tr><td>1</td><td>1</td></tr>
+                <tr><td>0</td><td>1</td></tr>
+            </table>
+        </div>
+        <div class="op">×</div>
+        <div class="matrix-display">
+            <div class="label">旋转矩阵 R</div>
+            <table id="matrix-r">
+                <tr><td>0</td><td>-1</td></tr>
+                <tr><td>1</td><td>0</td></tr>
+            </table>
+        </div>
+        <div class="op">=</div>
+        <div class="matrix-display">
+            <div class="label">复合矩阵 C = SR</div>
+            <table id="matrix-c">
+                <tr><td>?</td><td>?</td></tr>
+                <tr><td>?</td><td>?</td></tr>
+            </table>
+        </div>
+    </div>
+    
+    <svg id="canvas" width="600" height="600" viewBox="-300 -300 600 600"></svg>
+    <div class="info" id="info-panel">请点击按钮开始</div>
+    <div>
+        <button id="btn1" onclick="showInitialState()">第一步：展示初始状态</button>
+        <button id="btn2" onclick="applyRotation()" disabled>第二步：应用旋转 R</button>
+        <button id="btn3" onclick="applyShear()" disabled>第三步：应用剪切 S</button>
+        <button onclick="reset()">重置</button>
+    </div>
+
+    <script>
+        const svg = document.getElementById('canvas');
+        const infoPanel = document.getElementById('info-panel');
+        const matrixC_table = document.getElementById('matrix-c');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 50;
+
+        const i_initial = { x: 1, y: 0 }; const j_initial = { x: 0, y: 1 };
+        const i_rotated = { x: 0, y: 1 }; const j_rotated = { x: -1, y: 0 };
+        const i_final = { x: 1, y: 1 }; const j_final = { x: -1, y: 0 };
+        const v_coeffs = { c1: 2, c2: 1 };
+        
+        let current_i = { ...i_initial };
+        let current_j = { ...j_initial };
+        let animationFrameId = null;
+
+        function createVector(x, y, color, width = 2) { /* ... same as before ... */ 
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', 0);
+            line.setAttribute('x2', x * SCALE); line.setAttribute('y2', -y * SCALE);
+            line.setAttribute('stroke', color); line.setAttribute('stroke-width', width);
+            line.setAttribute('marker-end', `url(#arrow-${color})`);
+            return line;
+        }
+        function createMarker(id, color) { /* ... same as before ... */ 
+            const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', 8); marker.setAttribute('refY', 5);
+            marker.setAttribute('markerWidth', 4); marker.setAttribute('markerHeight', 4);
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); path.setAttribute('fill', color);
+            marker.appendChild(path); return marker;
+        }
+        function drawGrid(i_vec, j_vec) { /* ... same as before ... */ 
+            const gridGroup = document.createElementNS(SVG_NS, 'g');
+            gridGroup.setAttribute('stroke', '#ddd'); gridGroup.setAttribute('stroke-width', 0.5);
+            for (let i = -10; i <= 10; i++) {
+                const startX1 = i * i_vec.x * SCALE - 10 * j_vec.x * SCALE; const startY1 = -i * i_vec.y * SCALE + 10 * j_vec.y * SCALE;
+                const endX1 = i * i_vec.x * SCALE + 10 * j_vec.x * SCALE; const endY1 = -i * i_vec.y * SCALE - 10 * j_vec.y * SCALE;
+                const line1 = document.createElementNS(SVG_NS, 'line');
+                line1.setAttribute('x1', startX1); line1.setAttribute('y1', startY1); line1.setAttribute('x2', endX1); line1.setAttribute('y2', endY1);
+                gridGroup.appendChild(line1);
+                const startX2 = i * j_vec.x * SCALE - 10 * i_vec.x * SCALE; const startY2 = -i * j_vec.y * SCALE + 10 * i_vec.y * SCALE;
+                const endX2 = i * j_vec.x * SCALE + 10 * i_vec.x * SCALE; const endY2 = -i * j_vec.y * SCALE - 10 * i_vec.y * SCALE;
+                const line2 = document.createElementNS(SVG_NS, 'line');
+                line2.setAttribute('x1', startX2); line2.setAttribute('y1', startY2); line2.setAttribute('x2', endX2); line2.setAttribute('y2', endY2);
+                gridGroup.appendChild(line2);
+            }
+            return gridGroup;
+        }
+        function drawScene(i_vec, j_vec, show_v) {
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red')); defs.appendChild(createMarker('arrow-green', 'green')); defs.appendChild(createMarker('arrow-blue', 'blue'));
+            svg.appendChild(defs);
+            svg.appendChild(drawGrid(i_vec, j_vec));
+            svg.appendChild(createVector(100, 0, 'black', 1)); svg.appendChild(createVector(0, 100, 'black', 1));
+            svg.appendChild(createVector(i_vec.x, i_vec.y, 'red', 3)); svg.appendChild(createVector(j_vec.x, j_vec.y, 'green', 3));
+            if (show_v) {
+                const v_x = v_coeffs.c1 * i_vec.x + v_coeffs.c2 * j_vec.x;
+                const v_y = v_coeffs.c1 * i_vec.y + v_coeffs.c2 * j_vec.y;
+                svg.appendChild(createVector(v_x, v_y, 'blue', 5));
+            }
+        }
+
+        function animateTransform(start_i, start_j, end_i, end_j, callback) { /* ... same as before ... */ 
+            cancelAnimationFrame(animationFrameId); let start_time = null; const duration = 2000;
+            function animate(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+                current_i.x = start_i.x + (end_i.x - start_i.x) * progress;
+                current_i.y = start_i.y + (end_i.y - start_i.y) * progress;
+                current_j.x = start_j.x + (end_j.x - start_j.x) * progress;
+                current_j.y = start_j.y + (end_j.y - start_j.y) * progress;
+                drawScene(current_i, current_j, true);
+                if (progress < 1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else { if (callback) callback(); }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function showInitialState() {
+             reset();
+             // FIX 1: Draw the initial vector
+             drawScene(current_i, current_j, true);
+             infoPanel.innerHTML = `<b>初始状态:</b> 向量 v = 2i + 1j = [2, 1]`;
+             document.getElementById('btn2').disabled = false;
+        }
+        
+        function applyRotation() {
+            document.getElementById('btn1').disabled = true; document.getElementById('btn2').disabled = true;
+            infoPanel.innerHTML = '<b>第1步: 旋转R</b> <br> [[0,-1],[1,0]] * [2,1] = [-1,2]';
+            animateTransform(current_i, current_j, i_rotated, j_rotated, () => {
+                const v_rot_x = v_coeffs.c1 * i_rotated.x + v_coeffs.c2 * j_rotated.x;
+                const v_rot_y = v_coeffs.c1 * i_rotated.y + v_coeffs.c2 * j_rotated.y;
+                infoPanel.innerHTML = `<b>旋转完成!</b> 新位置是 [${v_rot_x}, ${v_rot_y}] <br> <b>计算过程:</b> [[0,-1],[1,0]] * [2,1] = [${v_rot_x},${v_rot_y}]`;
+                document.getElementById('btn3').disabled = false;
+            });
+        }
+        
+        function applyShear() {
+            document.getElementById('btn3').disabled = true;
+            infoPanel.innerHTML = '<b>第2步: 剪切S</b> <br> [[1,1],[0,1]] * [-1,2] = [1,2]';
+            animateTransform(current_i, current_j, i_final, j_final, () => {
+                const v_final_x = v_coeffs.c1 * i_final.x + v_coeffs.c2 * j_final.x;
+                const v_final_y = v_coeffs.c1 * i_final.y + v_coeffs.c2 * j_final.y;
+                infoPanel.innerHTML = `<b>变换全部完成!</b> 最终位置是 [${v_final_x}, ${v_final_y}] <br> <b>计算过程:</b> [[1,1],[0,1]] * [-1,2] = [${v_final_x},${v_final_y}] <br> <b>等效于 C*v:</b> [[1,-1],[1,0]] * [2,1] = [${v_final_x},${v_final_y}]`;
+                // NEW: Update matrix C table
+                matrixC_table.rows[0].cells[0].innerText = i_final.x;
+                matrixC_table.rows[1].cells[0].innerText = i_final.y;
+                matrixC_table.rows[0].cells[1].innerText = j_final.x;
+                matrixC_table.rows[1].cells[1].innerText = j_final.y;
+            });
+        }
+
+        function reset() {
+            cancelAnimationFrame(animationFrameId);
+            current_i = { ...i_initial }; current_j = { ...j_initial };
+            drawScene(current_i, current_j, false);
+            infoPanel.innerHTML = "请点击按钮开始";
+            document.getElementById('btn1').disabled = false; document.getElementById('btn2').disabled = true; document.getElementById('btn3').disabled = true;
+            matrixC_table.rows[0].cells[0].innerText = '?'; matrixC_table.rows[1].cells[0].innerText = '?';
+            matrixC_table.rows[0].cells[1].innerText = '?'; matrixC_table.rows[1].cells[1].innerText = '?';
+        }
+
+        // Initial draw
+        reset();
+    </script>
+</body>
+</html>

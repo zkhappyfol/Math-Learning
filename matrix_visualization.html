@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>矩阵变换可视化</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        svg { border: 1px solid #ccc; }
+        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
+        .info { font-size: 18px; margin: 10px; min-height: 50px; }
+    </style>
+</head>
+<body>
+    <h1>矩阵变换可视化：追踪基础向量</h1>
+    <p>矩阵 B = [[1, -2], [0, 3]] 如何变换向量 v = [2, 1]</p>
+    <svg id="canvas" width="600" height="600" viewBox="-300 -300 600 600"></svg>
+    <div class="info" id="info-panel">请点击按钮开始</div>
+    <div>
+        <button onclick="showInitialState()">第一步：展示初始状态</button>
+        <button onclick="animateTransform()">第二步：执行变换！</button>
+        <button onclick="reset()">重置</button>
+    </div>
+
+    <script>
+        const svg = document.getElementById('canvas');
+        const infoPanel = document.getElementById('info-panel');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 50;
+
+        // 初始基础向量
+        let i_hat = { x: 1, y: 0 };
+        let j_hat = { x: 0, y: 1 };
+
+        // 变换后的基础向量 (来自矩阵B的列)
+        const i_hat_new = { x: 1, y: 0 };
+        const j_hat_new = { x: -2, y: 3 };
+
+        // 我们的向量 v = 2i + 1j
+        const v_coeffs = { c1: 2, c2: 1 };
+
+        let animationFrameId = null;
+
+        function createVector(x, y, color, width = 2) {
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0);
+            line.setAttribute('y1', 0);
+            line.setAttribute('x2', x * SCALE);
+            line.setAttribute('y2', -y * SCALE); // y-axis is inverted in SVG
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', width);
+            line.setAttribute('marker-end', 'url(#arrow-' + color + ')');
+            return line;
+        }
+        
+        function createMarker(id, color) {
+            const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', id);
+            marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', 8);
+            marker.setAttribute('refY', 5);
+            marker.setAttribute('markerWidth', 4);
+            marker.setAttribute('markerHeight', 4);
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+            path.setAttribute('fill', color);
+            marker.appendChild(path);
+            return marker;
+        }
+
+        function drawGrid(i_vec, j_vec) {
+            const gridGroup = document.createElementNS(SVG_NS, 'g');
+            gridGroup.setAttribute('id', 'grid');
+            gridGroup.setAttribute('stroke', '#ddd');
+            gridGroup.setAttribute('stroke-width', 0.5);
+
+            for (let i = -10; i <= 10; i++) {
+                // Lines parallel to j_vec
+                const startX1 = i * i_vec.x * SCALE - 10 * j_vec.x * SCALE;
+                const startY1 = -i * i_vec.y * SCALE + 10 * j_vec.y * SCALE;
+                const endX1 = i * i_vec.x * SCALE + 10 * j_vec.x * SCALE;
+                const endY1 = -i * i_vec.y * SCALE - 10 * j_vec.y * SCALE;
+                const line1 = document.createElementNS(SVG_NS, 'line');
+                line1.setAttribute('x1', startX1);
+                line1.setAttribute('y1', startY1);
+                line1.setAttribute('x2', endX1);
+                line1.setAttribute('y2', endY1);
+                gridGroup.appendChild(line1);
+
+                // Lines parallel to i_vec
+                const startX2 = i * j_vec.x * SCALE - 10 * i_vec.x * SCALE;
+                const startY2 = -i * j_vec.y * SCALE + 10 * i_vec.y * SCALE;
+                const endX2 = i * j_vec.x * SCALE + 10 * i_vec.x * SCALE;
+                const endY2 = -i * j_vec.y * SCALE - 10 * i_vec.y * SCALE;
+                const line2 = document.createElementNS(SVG_NS, 'line');
+                line2.setAttribute('x1', startX2);
+                line2.setAttribute('y1', startY2);
+                line2.setAttribute('x2', endX2);
+                line2.setAttribute('y2', endY2);
+                gridGroup.appendChild(line2);
+            }
+            return gridGroup;
+        }
+
+        function drawScene(i_vec, j_vec, show_v, show_v_new) {
+            svg.innerHTML = ''; // Clear canvas
+            
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red'));
+            defs.appendChild(createMarker('arrow-green', 'green'));
+            defs.appendChild(createMarker('arrow-blue', 'blue'));
+            defs.appendChild(createMarker('arrow-purple', 'purple'));
+            svg.appendChild(defs);
+
+            svg.appendChild(drawGrid(i_vec, j_vec));
+
+            const xAxis = createVector(100, 0, 'black', 1);
+            const yAxis = createVector(0, 100, 'black', 1);
+            svg.appendChild(xAxis);
+            svg.appendChild(yAxis);
+
+            const i_vector_element = createVector(i_vec.x, i_vec.y, 'red', 3);
+            const j_vector_element = createVector(j_vec.x, j_vec.y, 'green', 3);
+            svg.appendChild(i_vector_element);
+            svg.appendChild(j_vector_element);
+            
+            if (show_v) {
+                const v_vector_element = createVector(v_coeffs.c1 * i_vec.x + v_coeffs.c2 * j_vec.x, v_coeffs.c1 * i_vec.y + v_coeffs.c2 * j_vec.y, 'blue', 4);
+                svg.appendChild(v_vector_element);
+            }
+
+            if (show_v_new) {
+                 const v_new_vector_element = createVector(v_coeffs.c1 * i_vec.x + v_coeffs.c2 * j_vec.x, v_coeffs.c1 * i_vec.y + v_coeffs.c2 * j_vec.y, 'purple', 5);
+                svg.appendChild(v_new_vector_element);
+            }
+        }
+        
+        function reset() {
+            cancelAnimationFrame(animationFrameId);
+            i_hat = { x: 1, y: 0 };
+            j_hat = { x: 0, y: 1 };
+            drawScene(i_hat, j_hat, false, false);
+            infoPanel.innerHTML = "请点击按钮开始";
+        }
+
+        function showInitialState() {
+             reset();
+             drawScene(i_hat, j_hat, true, false);
+             const v_x = v_coeffs.c1 * i_hat.x + v_coeffs.c2 * j_hat.x;
+             const v_y = v_coeffs.c1 * i_hat.y + v_coeffs.c2 * j_hat.y;
+             infoPanel.innerHTML = `初始状态: i = [1,0], j = [0,1]。 向量 v = 2i + 1j = [${v_x}, ${v_y}]`;
+        }
+        
+        function animateTransform() {
+            cancelAnimationFrame(animationFrameId);
+            let start_time = null;
+            const duration = 2000; // 2 seconds animation
+
+            function animate(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+
+                const current_i_x = i_hat.x + (i_hat_new.x - i_hat.x) * progress;
+                const current_i_y = i_hat.y + (i_hat_new.y - i_hat.y) * progress;
+                const current_j_x = j_hat.x + (j_hat_new.x - j_hat.x) * progress;
+                const current_j_y = j_hat.y + (j_hat_new.y - j_hat.y) * progress;
+                
+                const current_i = {x: current_i_x, y: current_i_y};
+                const current_j = {x: current_j_x, y: current_j_y};
+
+                drawScene(current_i, current_j, true, false);
+
+                if (progress < 1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                    drawScene(i_hat_new, j_hat_new, false, true);
+                    const v_new_x = v_coeffs.c1 * i_hat_new.x + v_coeffs.c2 * j_hat_new.x;
+                    const v_new_y = v_coeffs.c1 * i_hat_new.y + v_coeffs.c2 * j_hat_new.y;
+                    infoPanel.innerHTML = `变换完成! 新i = [1,0], 新j = [-2,3]。 新向量 v' = 2(新i) + 1(新j) = [${v_new_x}, ${v_new_y}]`;
+                }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Initial draw
+        reset();
+    </script>
+</body>
+</html>

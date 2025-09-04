@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>几何求解 Ax = b</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        .container { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 10px 0; }
+        .matrix-display { border: 1px solid #999; padding: 10px; border-radius: 5px; }
+        .matrix-display .label { font-weight: bold; margin-bottom: 5px; }
+        .matrix-display table { border-collapse: collapse; margin: 0 auto; }
+        .matrix-display td { width: 45px; height: 35px; text-align: center; font-size: 16px; border: 1px solid #ccc; }
+        svg { border: 1px solid #ccc; }
+        button { font-size: 16px; padding: 10px; margin: 5px; cursor: pointer; }
+        .info { font-family: 'Courier New', Courier, monospace; font-size: 16px; margin: 10px; min-height: 50px; background-color: #f0f0f0; padding: 10px; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <h1>几何求解 Ax = b: 计算 x = A⁻¹b</h1>
+    <div class="container">
+        <div class="matrix-display">
+            <div class="label">逆矩阵 A⁻¹</div>
+            <table>
+                <tr><td>-0.1</td><td>0.3</td></tr>
+                <tr><td>0.4</td><td>-0.2</td></tr>
+            </table>
+        </div>
+         <div class="matrix-display">
+            <div class="label">目标向量 b</div>
+            <table><tr><td>8</td></tr><tr><td>6</td></tr></table>
+        </div>
+    </div>
+    <svg id="canvas" width="800" height="600" viewBox="-400 -300 800 600"></svg>
+    <div class="info" id="info-panel">请点击按钮开始</div>
+    <div>
+        <button id="btn1" onclick="showProblem()">第一步：展示问题</button>
+        <button id="btn2" onclick="applyInverseTransform()" disabled>第二步：应用反向变换 A⁻¹</button>
+        <button onclick="reset()">重置</button>
+    </div>
+
+    <script>
+        const svg = document.getElementById('canvas');
+        const infoPanel = document.getElementById('info-panel');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCALE = 40;
+
+        const i_initial = { x: 1, y: 0 };
+        const j_initial = { x: 0, y: 1 };
+        
+        const b_vec = { x: 8, y: 6 };
+        
+        const i_final = { x: -0.1, y: 0.4 }; // Columns of A_inv
+        const j_final = { x: 0.3, y: -0.2 };
+
+        const x_vec = {x: 1, y: 2}; // The solution A_inv * b
+
+        let current_i = { ...i_initial };
+        let current_j = { ...j_initial };
+        let animationFrameId = null;
+
+        function createVector(x, y, color, width = 2) { /* ... same as before ... */ 
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', 0); line.setAttribute('y1', 0);
+            line.setAttribute('x2', x * SCALE); line.setAttribute('y2', -y * SCALE);
+            line.setAttribute('stroke', color); line.setAttribute('stroke-width', width);
+            line.setAttribute('marker-end', `url(#arrow-${color})`);
+            return line;
+        }
+        function createMarker(id, color) { /* ... same as before ... */ 
+            const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', 8); marker.setAttribute('refY', 5);
+            marker.setAttribute('markerWidth', 4); marker.setAttribute('markerHeight', 4);
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); path.setAttribute('fill', color);
+            marker.appendChild(path); return marker;
+        }
+        function drawGrid(i_vec, j_vec) { /* ... same as before ... */ 
+            const gridGroup = document.createElementNS(SVG_NS, 'g');
+            gridGroup.setAttribute('stroke', '#ddd'); gridGroup.setAttribute('stroke-width', 0.5);
+            for (let i = -20; i <= 20; i++) {
+                const startX1 = i * i_vec.x * SCALE - 20 * j_vec.x * SCALE; const startY1 = -i * i_vec.y * SCALE + 20 * j_vec.y * SCALE;
+                const endX1 = i * i_vec.x * SCALE + 20 * j_vec.x * SCALE; const endY1 = -i * i_vec.y * SCALE - 20 * j_vec.y * SCALE;
+                const line1 = document.createElementNS(SVG_NS, 'line');
+                line1.setAttribute('x1', startX1); line1.setAttribute('y1', startY1); line1.setAttribute('x2', endX1); line1.setAttribute('y2', endY1);
+                gridGroup.appendChild(line1);
+                const startX2 = i * j_vec.x * SCALE - 20 * i_vec.x * SCALE; const startY2 = -i * j_vec.y * SCALE + 20 * i_vec.y * SCALE;
+                const endX2 = i * j_vec.x * SCALE + 20 * i_vec.x * SCALE; const endY2 = -i * j_vec.y * SCALE - 20 * i_vec.y * SCALE;
+                const line2 = document.createElementNS(SVG_NS, 'line');
+                line2.setAttribute('x1', startX2); line2.setAttribute('y1', startY2); line2.setAttribute('x2', endX2); line2.setAttribute('y2', endY2);
+                gridGroup.appendChild(line2);
+            }
+            return gridGroup;
+        }
+
+        function drawScene(i_vec, j_vec, b_current, x_final) {
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red'));
+            defs.appendChild(createMarker('arrow-green', 'green'));
+            defs.appendChild(createMarker('arrow-purple', 'purple'));
+            defs.appendChild(createMarker('arrow-blue', 'blue'));
+            svg.appendChild(defs);
+
+            svg.appendChild(drawGrid(i_vec, j_vec));
+            svg.appendChild(createVector(20, 0, 'black', 1)); 
+            svg.appendChild(createVector(0, 20, 'black', 1));
+            
+            if (b_current) {
+                svg.appendChild(createVector(b_current.x, b_current.y, 'purple', 5));
+            }
+            if (x_final) {
+                 svg.appendChild(createVector(x_final.x, x_final.y, 'blue', 5));
+            }
+        }
+        
+        function animateTransform(callback) {
+            cancelAnimationFrame(animationFrameId);
+            let start_time = null;
+            const duration = 2000;
+            
+            function animate(timestamp) {
+                if (!start_time) start_time = timestamp;
+                const progress = Math.min((timestamp - start_time) / duration, 1);
+
+                current_i.x = i_initial.x + (i_final.x - i_initial.x) * progress;
+                current_i.y = i_initial.y + (i_final.y - i_initial.y) * progress;
+                current_j.x = j_initial.x + (j_final.x - j_initial.x) * progress;
+                current_j.y = j_initial.y + (j_final.y - j_initial.y) * progress;
+                
+                const b_current_x = b_vec.x * current_i.x + b_vec.y * current_j.x; // This is not right, needs full matrix
+                const b_current_x_final = i_initial.x * b_vec.x + j_initial.x * b_vec.y; //This is b_vec.x
+                const b_current_y_final = i_initial.y * b_vec.x + j_initial.y * b_vec.y; //This is b_vec.y
+                
+                const b_moved_x = b_vec.x + (x_vec.x - b_vec.x) * progress;
+                const b_moved_y = b_vec.y + (x_vec.y - b_vec.y) * progress;
+
+
+                drawScene(current_i, current_j, {x: b_moved_x, y: b_moved_y}, null);
+
+                if (progress < 1) {
+                    animationFrameId = requestAnimationFrame(animate);
+                } else {
+                    if (callback) callback();
+                }
+            }
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function showProblem() {
+            reset();
+            drawScene(i_initial, j_initial, b_vec, null);
+            infoPanel.innerHTML = `<b>问题:</b> 空间中有一个目标点 b = [8, 6]。我们要找到哪个向量 x, 经过 A 变换后能到达 b 点。`;
+            document.getElementById('btn2').disabled = false;
+        }
+
+        function applyInverseTransform() {
+            document.getElementById('btn1').disabled = true;
+            document.getElementById('btn2').disabled = true;
+            infoPanel.innerHTML = '<b>执行反向变换 A⁻¹</b>: 空间根据 A⁻¹ 进行扭曲, 观察向量 b 被带到哪里...';
+            animateTransform(() => {
+                drawScene(i_final, j_final, null, x_vec);
+                infoPanel.innerHTML = `<b>变换完成!</b> 目标向量 b 被带回到了初始位置 x = [1, 2]。<br>这就是方程的解！`;
+            });
+        }
+
+        function reset() {
+            cancelAnimationFrame(animationFrameId);
+            current_i = { ...i_initial };
+            current_j = { ...j_initial };
+            drawScene(current_i, current_j, null, null);
+            infoPanel.innerHTML = "请点击按钮开始";
+            document.getElementById('btn1').disabled = false;
+            document.getElementById('btn2').disabled = true;
+        }
+
+        // Initial draw
+        reset();
+    </script>
+</body>
+</html>

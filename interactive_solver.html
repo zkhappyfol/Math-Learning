@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式线性方程组求解器 V11</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 20px; }
+        header { text-align: center; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        h1, h2 { color: #0056b3; }
+        .step { background-color: #fff; padding: 15px 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: none; /* Initially hidden */ }
+        .visible { display: block; }
+        .input-area { padding: 20px; background-color: #e9ecef; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .input-area input { width: 40px; text-align: center; font-size: 18px; margin: 0 5px; }
+        .main-controls { text-align: center; margin-bottom: 20px; }
+        button { font-size: 18px; padding: 12px 25px; cursor: pointer; margin: 5px; border-radius: 5px; border: none; color: white; transition: background-color 0.2s; }
+        #startBtn { background-color: #007bff; }
+        #startBtn:hover { background-color: #0056b3; }
+        .floating-controls {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .floating-controls button { width: 150px; }
+        #nextBtn { background-color: #28a745; }
+        #nextBtn:hover { background-color: #218838; }
+        #resetBtn { background-color: #6c757d; }
+        #resetBtn:hover { background-color: #5a6268; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        code { font-family: 'Courier New', Courier, monospace; background-color: #eee; padding: 2px 5px; border-radius: 4px; }
+        .matrix-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin: 15px 0; flex-wrap: wrap; }
+        .matrix table { border-collapse: collapse; }
+        .matrix td { width: 50px; height: 40px; text-align: center; font-size: 18px; border: 1px solid #ccc; }
+        .matrix .brackets { font-size: 60px; font-weight: bold; }
+        .operator { font-size: 24px; font-weight: bold; }
+        .solution { font-size: 22px; font-weight: bold; color: #28a745; text-align: center; }
+        svg { border: 1px solid #ccc; width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+
+    <header><h1>交互式线性方程组求解器 (V11)</h1></header>
+
+    <main id="presentation-container">
+        <div class="input-area">
+            <h3>输入您的方程组:</h3>
+            <div>
+                <input type="number" id="a" value="2"> x + <input type="number" id="b" value="3"> y = <input type="number" id="e" value="8">
+            </div>
+            <div style="margin-top: 10px;">
+                <input type="number" id="c" value="4"> x + <input type="number" id="d" value="1"> y = <input type="number" id="f" value="6">
+            </div>
+        </div>
+
+        <div class="main-controls">
+            <button id="startBtn" onclick="prepareCalculation()">计算并准备可视化</button>
+        </div>
+
+        <div id="steps-container"></div>
+    </main>
+
+    <div class="floating-controls">
+        <button id="nextBtn" onclick="showNextStep()" disabled>下一步</button>
+        <button id="resetBtn" onclick="reset()">重置</button>
+    </div>
+    
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const stepsContainer = document.getElementById('steps-container');
+        const SVG_NS = "http://www.w3.org/2000/svg";
+
+        let state = {};
+
+        function createVector(x1,y1,x2,y2,c,w=2,s="solid",sc){const l=document.createElementNS(SVG_NS,'line');l.setAttribute('x1',x1*sc);l.setAttribute('y1',-y1*sc);l.setAttribute('x2',x2*sc);l.setAttribute('y2',-y2*sc);l.setAttribute('stroke',c);l.setAttribute('stroke-width',w);l.setAttribute('marker-end',`url(#arrow-${c})`);if(s==='dashed'){l.setAttribute('stroke-dasharray','5,5');}return l;}
+        function createMarker(id,c){const m=document.createElementNS(SVG_NS,'marker');m.setAttribute('id',id);m.setAttribute('viewBox','0 0 10 10');m.setAttribute('refX',8);m.setAttribute('refY',5);m.setAttribute('markerWidth',4);m.setAttribute('markerHeight',4);m.setAttribute('orient','auto-start-reverse');const p=document.createElementNS(SVG_NS,'path');p.setAttribute('d','M 0 0 L 10 5 L 0 10 z');p.setAttribute('fill',c);m.appendChild(p);return m;}
+        function drawGrid(iv,jv,sc){const g=document.createElementNS(SVG_NS,'g');g.setAttribute('stroke','#ddd');g.setAttribute('stroke-width',0.5);for(let i=-20;i<=20;i++){const sx1=i*iv.x*sc-20*jv.x*sc,sy1=-i*iv.y*sc+20*jv.y*sc,ex1=i*iv.x*sc+20*jv.x*sc,ey1=-i*iv.y*sc-20*jv.y*sc;const l1=document.createElementNS(SVG_NS,'line');l1.setAttribute('x1',sx1);l1.setAttribute('y1',sy1);l1.setAttribute('x2',ex1);l1.setAttribute('y2',ey1);g.appendChild(l1);const sx2=i*jv.x*sc-20*iv.x*sc,sy2=-i*jv.y*sc+20*iv.y*sc,ex2=i*jv.x*sc+20*iv.x*sc,ey2=-i*jv.y*sc-20*iv.y*sc;const l2=document.createElementNS(SVG_NS,'line');l2.setAttribute('x1',sx2);l2.setAttribute('y1',sy2);l2.setAttribute('x2',ex2);l2.setAttribute('y2',ey2);g.appendChild(l2);}return g;}
+
+        function drawScene(svg, i_vec, j_vec, show_x, show_b, show_basis=false) {
+            const max_coord = Math.max(Math.abs(state.vectorB[0]), Math.abs(state.vectorB[1]), Math.abs(state.vectorX[0]), Math.abs(state.vectorX[1]), 5);
+            const view_range = (max_coord + 2) * 2;
+            const scale = (svg.clientWidth || 800) / view_range;
+            svg.setAttribute('viewBox', `${-view_range/2*scale} ${-view_range/2*scale} ${view_range*scale} ${view_range*scale}`);
+            svg.innerHTML = '';
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            defs.appendChild(createMarker('arrow-red', 'red')); defs.appendChild(createMarker('arrow-green', 'green'));
+            defs.appendChild(createMarker('arrow-purple', 'purple')); defs.appendChild(createMarker('arrow-blue', 'blue'));
+            svg.appendChild(defs);
+            svg.appendChild(drawGrid(i_vec, j_vec, scale));
+            svg.appendChild(createVector(0,0,view_range,0,'black',1,'solid',scale/2)); svg.appendChild(createVector(0,0,0,view_range,'black',1,'solid',scale/2));
+            if (show_basis) { svg.appendChild(createVector(0,0,i_vec.x, i_vec.y, 'red', 3, 'solid', scale)); svg.appendChild(createVector(0,0,j_vec.x, j_vec.y, 'green', 3, 'solid', scale)); }
+            if (show_b) { svg.appendChild(createVector(0,0,state.vectorB[0], state.vectorB[1], 'purple', 3, 'dashed', scale)); }
+            if (show_x) {
+                const x_comp = state.vectorX[0]; const y_comp = state.vectorX[1];
+                const x_tx = x_comp * i_vec.x + y_comp * j_vec.x;
+                const x_ty = x_comp * i_vec.y + y_comp * j_vec.y;
+                const i_scaled_x = x_comp * i_vec.x; const i_scaled_y = x_comp * i_vec.y;
+                svg.appendChild(createVector(0, 0, i_scaled_x, i_scaled_y, 'red', 2, 'dashed', scale));
+                const j_scaled_x = y_comp * j_vec.x; const j_scaled_y = y_comp * j_vec.y;
+                svg.appendChild(createVector(i_scaled_x, i_scaled_y, i_scaled_x + j_scaled_x, i_scaled_y + j_scaled_y, 'green', 2, 'dashed', scale));
+                svg.appendChild(createVector(0, 0, x_tx, x_ty, 'blue', 5, 'solid', scale));
+            }
+        }
+        
+        function reset() {
+            startBtn.disabled = false;
+            nextBtn.disabled = true;
+            stepsContainer.innerHTML = '';
+            state = { currentStep: 0 };
+            // Reset input fields to default
+            document.getElementById('a').value = 2; document.getElementById('b').value = 3; document.getElementById('e').value = 8;
+            document.getElementById('c').value = 4; document.getElementById('d').value = 1; document.getElementById('f').value = 6;
+        }
+
+        function prepareCalculation() {
+            const a=parseFloat(document.getElementById('a').value),b=parseFloat(document.getElementById('b').value),c=parseFloat(document.getElementById('c').value),d=parseFloat(document.getElementById('d').value),e=parseFloat(document.getElementById('e').value),f=parseFloat(document.getElementById('f').value);
+            if ([a,b,c,d,e,f].some(isNaN)) { alert("请输入有效的数字！"); return; }
+            state.matrixA = [[a, b], [c, d]]; state.vectorB = [e, f]; state.detA = a * d - b * c;
+            if (Math.abs(state.detA) < 1e-9) { alert(`行列式 det(A) = ${state.detA.toFixed(2)} ≈ 0。\n矩阵不可逆，此方法无法求解唯一解。`); return; }
+            const invDet = 1 / state.detA; state.matrixA_inv = [[d * invDet, -b * invDet], [-c * invDet, a * invDet]];
+            state.vectorX = [state.matrixA_inv[0][0]*e+state.matrixA_inv[0][1]*f, state.matrixA_inv[1][0]*e+state.matrixA_inv[1][1]*f];
+            state.currentStep = 0; stepsContainer.innerHTML = ''; startBtn.disabled = true; nextBtn.disabled = false; showNextStep();
+        }
+
+        function showNextStep() {
+            state.currentStep++;
+            const stepDiv = document.createElement('div');
+            stepDiv.id = `step${state.currentStep}`;
+            stepDiv.className = 'step';
+            let content = '';
+            const fN = (num) => parseFloat(num.toFixed(2));
+            switch (state.currentStep) {
+                case 1: content = `<h2>1. 您输入的方程组</h2><code>${state.matrixA[0][0]}x + ${state.matrixA[0][1]}y = ${state.vectorB[0]}</code><br><code>${state.matrixA[1][0]}x + ${state.matrixA[1][1]}y = ${state.vectorB[1]}</code>`; break;
+                case 2: content = `<h2>2. 拆解为矩阵形式 Ax = b</h2><div class="matrix-container"><div class="matrix"><table><tr><td>${state.matrixA[0][0]}</td><td>${state.matrixA[0][1]}</td></tr><tr><td>${state.matrixA[1][0]}</td><td>${state.matrixA[1][1]}</td></tr></table><div>A</div></div><div class="matrix"><table><tr><td>x</td></tr><tr><td>y</td></tr></table><div>x</div></div><div class="operator">=</div><div class="matrix"><table><tr><td>${state.vectorB[0]}</td></tr><tr><td>${state.vectorB[1]}</td></tr></table><div>b</div></div></div>`; break;
+                case 3: content = `<h2>3. 计算逆矩阵 A⁻¹</h2><p>行列式 det(A) = ${fN(state.detA)}</p><div class="matrix-container"><div class="matrix"><code>A⁻¹ = </code></div><div class="operator">1/${fN(state.detA)}</div><div class="matrix"><span class="brackets">[</span><table><tr><td>${state.matrixA[1][1]}</td><td>${-state.matrixA[0][1]}</td></tr><tr><td>${-state.matrixA[1][0]}</td><td>${state.matrixA[0][0]}</td></tr></table><span class="brackets">]</span></div><div class="operator">=</div><div class="matrix"><span class="brackets">[</span><table><tr><td>${fN(state.matrixA_inv[0][0])}</td><td>${fN(state.matrixA_inv[0][1])}</td></tr><tr><td>${fN(state.matrixA_inv[1][0])}</td><td>${fN(state.matrixA_inv[1][1])}</td></tr></table><span class="brackets">]</span></div></div>`; break;
+                case 4: content = `<h2>4. 算出未知向量 x = A⁻¹b</h2><div class="solution">解：x = [${fN(state.vectorX[0])}, ${fN(state.vectorX[1])}]</div>`; break;
+                case 5: content = `<h2>5. 几何验证：准备工作</h2><p>蓝色向量是解 <b>x=[${fN(state.vectorX[0])}, ${fN(state.vectorX[1])}]</b> (由其红绿分量构成), 紫色虚线是目标 <b>b=[\${state.vectorB[0]}, \${state.vectorB[1]}]</b></p><svg id="canvas" width="800" height="600"></svg>`; break;
+                case 6: content = `<h2>6. 动态验证：执行变换 A</h2><p>观察蓝色向量 x 如何随着空间变换，最终与紫色向量 b 重合...</p>`; break;
+                case 7: content = `<h2>7. 命中目标!</h2><p class="solution">验证成功！Ax = b</p>`; nextBtn.disabled = true; break;
+            }
+            stepDiv.innerHTML = content;
+            stepsContainer.appendChild(stepDiv);
+            stepDiv.classList.add('visible');
+            stepDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+            if (state.currentStep === 5) {
+                const canvas = document.getElementById('canvas');
+                drawScene(canvas, {x:1, y:0}, {x:0, y:1}, true, true, true);
+            }
+            if (state.currentStep === 6) {
+                const canvas = document.getElementById('canvas');
+                animateTransform(canvas);
+            }
+        }
+
+        function animateTransform(svg){
+            let st=null; const dur=2500;
+            const ii={x:1,y:0}, ji={x:0,y:1};
+            const iF={x:state.matrixA[0][0],y:state.matrixA[1][0]};
+            const jF={x:state.matrixA[0][1],y:state.matrixA[1][1]};
+            
+            function anim(ts){
+                if(!st)st=ts;
+                const p=Math.min((ts-st)/dur,1);
+                const ci={x:ii.x+(iF.x-ii.x)*p,y:ii.y+(iF.y-ii.y)*p};
+                const cj={x:ji.x+(jF.x-ji.x)*p,y:ji.y+(jF.y-ji.y)*p};
+                drawScene(svg,ci,cj,true,true,true);
+                if(p<1){requestAnimationFrame(anim);} else {showNextStep();}
+            }
+            requestAnimationFrame(anim);
+        }
+
+    </script>
+</body>
+</html>
